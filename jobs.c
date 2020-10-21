@@ -165,7 +165,7 @@ void *admit_jobs(void *arg) {
         q->admitted_jobs[q->tail] = q->pending_jobs;
         q->pending_jobs = q->pending_jobs->next;
         //Update the value of tail and number of admited jobs
-        q->tail += 1;
+        q->tail = (q.tail + 1) % QUEUE_LENGTH;
         q->num_admitted += 1;
         //Update the number of jobs left and capacity
         q->capacity -= 1;
@@ -211,7 +211,7 @@ void *execute_jobs(void *arg) {
             pthread_cond_wait(&q->admission_cv,&q->lock);
         }
         struct job *cur = q->admitted_jobs[q->head];
-        q->head  = q->head + 1;
+        q->head  = (q->head + 1) % QUEUE_LENGTH;
         q->num_admitted -= 1;
         q->capacity++;
         // Signal the admit jobs
@@ -223,16 +223,21 @@ void *execute_jobs(void *arg) {
             tassadar.resource_utilization_check[cur->resources[i]]--;
         }
         //Call magic function
+        assign_processor(cur);
         do_stuff(cur);
+
         pthread_mutex_lock(&tassadar.processor_records[cur->processor].lock);
         cur->next = tassadar.processor_records[cur->processor].completed_jobs;
         tassadar.processor_records[cur->processor].completed_jobs = cur;
         tassadar.processor_records[cur->processor].num_completed++;
+
+        pthread_mutex_unlock(&tassadar.processor_records[cur->processor].lock);
         for (int i = 0; i < cur->num_resources; i++)
         {
             pthread_mutex_unlock(&(tassadar.resource_locks[cur->resources[i]]));
         }
    }
+   pthread_cond_signal(&q->execution_cv);
    pthread_mutex_unlock(&q->lock);
    return NULL;
 }
