@@ -171,6 +171,8 @@ void *admit_jobs(void *arg) {
         q->capacity -= 1;
         q->pending_admission -= 1;
 
+        pthread_cond_signal(&q->admission_cv);
+        pthread_mutex_unlock(&q->lock);
     }
     return NULL;
 }
