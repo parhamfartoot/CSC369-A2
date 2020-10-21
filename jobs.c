@@ -151,13 +151,13 @@ void *admit_jobs(void *arg) {
     while(1)
     {
         pthread_mutex_lock(&q->lock);
-        if (q->pending_admission == 0)
+        if(q->pending_admission == 0)
         {
             pthread_mutex_unlock(&q->lock);
             return NULL;
         }
         //Wait until room is available
-        While(q->capacity == 0);
+        While(q->capacity == 0)
         {
             pthread_cond_wait(&q->admission_cv, &q->lock);
         }
