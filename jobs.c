@@ -98,7 +98,7 @@ void init_executor() {
     for (int i = 0; i < NUM_RESOURCES; i++)
     {
         //Initialize Lock for every recource
-        pthread_mutex_init(&tassadar.resource_locks[i], NULL);
+        pthread_mutex_init(&(tassadar.resource_locks[i]), NULL);
         //Set initial values
         tassadar.resource_utilization_check[i] = 0;    
     }
@@ -150,16 +150,16 @@ void *admit_jobs(void *arg) {
     //Run until no job left to be admited
     while(1)
     {
-        pthread_mutex_lock(&q->lock);
+        pthread_mutex_lock(&(q->lock));
         if(q->pending_admission == 0)
         {
-            pthread_mutex_unlock(&q->lock);
+            pthread_mutex_unlock(&(q->lock));
             return NULL;
         }
         //Wait until room is available
         while(q->capacity == 0)
         {
-            pthread_cond_wait(&q->admission_cv, &q->lock);
+            pthread_cond_wait(&(q->execution_cv), &(q->lock));
         }
         //Admit jobs
         q->admitted_jobs[q->tail] = q->pending_jobs;
@@ -171,8 +171,8 @@ void *admit_jobs(void *arg) {
         q->capacity -= 1;
         q->pending_admission -= 1;
 
-        pthread_cond_signal(&q->admission_cv);
-        pthread_mutex_unlock(&q->lock);
+        pthread_cond_signal(&(q->admission_cv));
+        pthread_mutex_unlock(&(q->lock));
     }
     return NULL;
 }
@@ -201,45 +201,54 @@ void *execute_jobs(void *arg) {
    //Run until no jobs left to be executed
    while(1)
    {
-       pthread_mutex_lock(&q->lock);
+       pthread_mutex_lock(&(q->lock));
        //No jobs left
-       if (q->pending_jobs == NULL && q->num_admitted == 0)
+       if (q->num_admitted == 0 && q->pending_admission == 0)
        {
-           pthread_mutex_unlock(&q->lock);
+           pthread_mutex_unlock(&(q->lock));
            return NULL;
        }
         // Wait if no jobs in the admission queue
         while(q->num_admitted  == 0 ){
-            pthread_cond_wait(&q->admission_cv,&q->lock);
+            pthread_cond_wait(&(q->admission_cv),&(q->lock));
         }
+
         struct job *cur = q->admitted_jobs[q->head];
+
         q->head  = (q->head + 1) % QUEUE_LENGTH;
         q->num_admitted -= 1;
         q->capacity++;
         // Signal the admit jobs
-        pthread_cond_signal(&q->admission_cv);
-        for(int i = 0; i < cur->num_resources; i ++)
+        //pthread_cond_signal(&q->admission_cv);
+        
+        for(int i = 0; i < NUM_RESOURCES; i ++)
         {
-            //Acquire resources
-            pthread_mutex_lock(&(tassadar.resource_locks[cur->resources[i]]));
-            tassadar.resource_utilization_check[cur->resources[i]]--;
+            for (int j = 0; j < cur->num_resources; j++)
+            {
+                if (i == cur->resources[j])
+                {
+                    //Acquire resources
+                    pthread_mutex_lock(&(tassadar.resource_locks[cur->resources[i]]));
+                    tassadar.resource_utilization_check[cur->resources[i]]--;
+                }
+            }
         }
         //Call magic function
         assign_processor(cur);
         do_stuff(cur);
 
-        pthread_mutex_lock(&tassadar.processor_records[cur->processor].lock);
+        pthread_mutex_lock(&(tassadar.processor_records[cur->processor].lock));
         cur->next = tassadar.processor_records[cur->processor].completed_jobs;
         tassadar.processor_records[cur->processor].completed_jobs = cur;
         tassadar.processor_records[cur->processor].num_completed++;
+        pthread_mutex_unlock(&(tassadar.processor_records[cur->processor].lock));
 
-        pthread_mutex_unlock(&tassadar.processor_records[cur->processor].lock);
         for (int i = 0; i < cur->num_resources; i++)
         {
             pthread_mutex_unlock(&(tassadar.resource_locks[cur->resources[i]]));
         }
-   }
    pthread_cond_signal(&q->execution_cv);
-   pthread_mutex_unlock(&q->lock);
+   pthread_mutex_unlock(&(q->lock));
+   }
    return NULL;
 }
