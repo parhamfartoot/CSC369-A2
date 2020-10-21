@@ -165,7 +165,7 @@ void *admit_jobs(void *arg) {
         q->admitted_jobs[q->tail] = q->pending_jobs;
         q->pending_jobs = q->pending_jobs->next;
         //Update the value of tail and number of admited jobs
-        q->tail = (q.tail + 1) % QUEUE_LENGTH;
+        q->tail = (q->tail + 1) % QUEUE_LENGTH;
         q->num_admitted += 1;
         //Update the number of jobs left and capacity
         q->capacity -= 1;
