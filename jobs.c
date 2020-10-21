@@ -228,8 +228,8 @@ void *execute_jobs(void *arg) {
                 if (i == cur->resources[j])
                 {
                     //Acquire resources
-                    pthread_mutex_lock(&(tassadar.resource_locks[cur->resources[i]]));
-                    tassadar.resource_utilization_check[cur->resources[i]]--;
+                    pthread_mutex_lock(&(tassadar.resource_locks[cur->resources[j]]));
+                    tassadar.resource_utilization_check[cur->resources[j]]--;
                 }
             }
         }
