@@ -157,7 +157,7 @@ void *admit_jobs(void *arg) {
             return NULL;
         }
         //Wait until room is available
-        While(q->capacity == 0)
+        while(q->capacity == 0)
         {
             pthread_cond_wait(&q->admission_cv, &q->lock);
         }
