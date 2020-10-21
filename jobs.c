@@ -94,9 +94,41 @@ void do_stuff(struct job *job) {
  * 
  */
 void init_executor() {
+    //Initialize recources
+    for (int i = 0; i < NUM_RESOURCES; i++)
+    {
+        //Initialize Lock for every recource
+        pthread_mutex_init(&tassadar.resource_locks[i], NULL);
+        //Set initial values
+        tassadar.resource_utilization_check[i] = 0;    
+    }
 
+    //Initialize the queues
+    for (int i = 0; i < NUM_QUEUES; i++)
+    {
+        //Initialize locks and condition variables
+        pthread_mutex_init(&tassadar.admission_queues[i].lock, NULL);
+        pthread_cond_init(&tassadar.admission_queues[i].admission_cv, NULL);
+        pthread_cond_init(&tassadar.admission_queues[i].execution_cv, NULL);
+        //Set initial values
+        tassadar.admission_queues[i].capacity = QUEUE_LENGTH;
+        tassadar.admission_queues[i].head = 0;
+        tassadar.admission_queues[i].tail = 0;
+        tassadar.admission_queues[i].pending_admission = 0;
+        tassadar.admission_queues[i].pending_jobs = malloc(sizeof(struct job) * QUEUE_LENGTH);
+        tassadar.admission_queues[i].num_admitted = 0;
+        tassadar.admission_queues[i].admitted_jobs = malloc(sizeof(struct job *) * QUEUE_LENGTH);      
+    }
 
-
+    //Initialize the processors
+    for (int i =0; i < NUM_PROCESSORS; i++)
+    {
+        //Initialize locks
+        pthread_mutex_init(&tassadar.processor_records[i].lock, NULL);
+        //Set initial values
+        tassadar.processor_records[i].completed_jobs = NULL;
+        tassadar.processor_records[i].num_completed = 0;
+    }
 }
 
 
@@ -114,8 +146,32 @@ void *admit_jobs(void *arg) {
 
     // This is just so that the code compiles without warnings
     // Remove this line once you implement this function
-    q = q;
+   
+    //Run until no job left to be admited
+    while(1)
+    {
+        pthread_mutex_lock(&q->lock);
+        if (q->pending_admission == 0)
+        {
+            pthread_mutex_unlock(&q->lock);
+            return NULL;
+        }
+        //Wait until room is available
+        While(q->capacity == 0);
+        {
+            pthread_cond_wait(&q->admission_cv, &q->lock);
+        }
+        //Admit jobs
+        q->admitted_jobs[q->tail] = q->pending_jobs;
+        q->pending_jobs = q->pending_jobs->next;
+        //Update the value of tail and number of admited jobs
+        q->tail += 1;
+        q->num_admitted += 1;
+        //Update the number of jobs left and capacity
+        q->capacity -= 1;
+        q->pending_admission -= 1;
 
+    }
     return NULL;
 }
 
@@ -140,10 +196,43 @@ void *admit_jobs(void *arg) {
 void *execute_jobs(void *arg) {
     struct admission_queue *q = arg;
 
-    // This is just so that the code compiles without warnings
-    // Remove this line once you implement this function
-    q = q;
-
-
-    return NULL;
+   //Run until no jobs left to be executed
+   while(1)
+   {
+       pthread_mutex_lock(&q->lock);
+       //No jobs left
+       if (q->pending_jobs == NULL && q->num_admitted == 0)
+       {
+           pthread_mutex_unlock(&q->lock);
+           return NULL;
+       }
+        // Wait if no jobs in the admission queue
+        while(q->num_admitted  == 0 ){
+            pthread_cond_wait(&q->admission_cv,&q->lock);
+        }
+        struct job *cur = q->admitted_jobs[q->head];
+        q->head  = q->head + 1;
+        q->num_admitted -= 1;
+        q->capacity++;
+        // Signal the admit jobs
+        pthread_cond_signal(&q->admission_cv);
+        for(int i = 0; i < cur->num_resources; i ++)
+        {
+            //Acquire resources
+            pthread_mutex_lock(&(tassadar.resource_locks[cur->resources[i]]));
+            tassadar.resource_utilization_check[cur->resources[i]]--;
+        }
+        //Call magic function
+        do_stuff(cur);
+        pthread_mutex_lock(&tassadar.processor_records[cur->processor].lock);
+        cur->next = tassadar.processor_records[cur->processor].completed_jobs;
+        tassadar.processor_records[cur->processor].completed_jobs = cur;
+        tassadar.processor_records[cur->processor].num_completed++;
+        for (int i = 0; i < cur->num_resources; i++)
+        {
+            pthread_mutex_unlock(&(tassadar.resource_locks[cur->resources[i]]));
+        }
+   }
+   pthread_mutex_unlock(&q->lock);
+   return NULL;
 }
